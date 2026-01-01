@@ -11,7 +11,7 @@ import ReactDOM from 'react-dom/client';
 
 import { Artifact, Session, ComponentVariation, LayoutOption } from './types';
 import { INITIAL_PLACEHOLDERS } from './constants';
-import { generateId, computeDiffLines } from './utils';
+import { generateId, computeDiffLines, readFiles } from './utils';
 
 import DottedGlowBackground from './components/DottedGlowBackground';
 import ArtifactCard from './components/ArtifactCard';
@@ -23,7 +23,9 @@ import {
     ArrowLeftIcon, 
     ArrowRightIcon, 
     ArrowUpIcon, 
-    GridIcon 
+    GridIcon,
+    PaperclipIcon,
+    XIcon
 } from './components/Icons';
 
 // --- Simple Icons for the Toolbar ---
@@ -31,12 +33,18 @@ const EyeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height=
 const EyeOffIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>;
 const TerminalIcon = () => <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>;
 
+interface ImageData {
+    mimeType: string;
+    data: string;
+}
+
 function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [currentSessionIndex, setCurrentSessionIndex] = useState<number>(-1);
   const [focusedArtifactIndex, setFocusedArtifactIndex] = useState<number | null>(null);
   
   const [inputValue, setInputValue] = useState<string>('');
+  const [selectedImages, setSelectedImages] = useState<ImageData[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingPhase, setLoadingPhase] = useState<'idle' | 'planning' | 'executing'>('idle');
   
@@ -47,9 +55,6 @@ function App() {
   const [showPreview, setShowPreview] = useState(true);
   const [showAiBar, setShowAiBar] = useState(true);
   
-  // Two types of highlighting:
-  // 1. Pending: Lines identified by AI in Phase 1 (Orange/Yellow)
-  // 2. Completed: Actual diffs after Phase 2 (Green)
   const [pendingHighlights, setPendingHighlights] = useState<number[]>([]);
   const [highlightedLines, setHighlightedLines] = useState<number[]>([]);
   
@@ -66,6 +71,7 @@ function App() {
   const [componentVariations, setComponentVariations] = useState<ComponentVariation[]>([]);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const gridScrollRef = useRef<HTMLDivElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const workshopBodyRef = useRef<HTMLDivElement>(null);
@@ -146,6 +152,21 @@ function App() {
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(event.target.value);
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files && e.target.files.length > 0) {
+          const files = Array.from(e.target.files);
+          const imageData = await readFiles(files);
+          setSelectedImages(prev => [...prev, ...imageData]);
+          // Reset input
+          e.target.value = ''; 
+          inputRef.current?.focus();
+      }
+  };
+
+  const removeImage = (index: number) => {
+      setSelectedImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleCodeChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -264,7 +285,11 @@ Required JSON Output Format (stream ONE object per line):
     const artifact = currentSession.artifacts[artifactIndex];
     const originalHtml = artifact.html;
     
-    // Reset visual states
+    // Copy images from state to a local variable for the API call
+    const requestImages = [...selectedImages];
+    // Clear images from state immediately for UI
+    setSelectedImages([]);
+
     setPendingHighlights([]); 
     setHighlightedLines([]);
     setIsLoading(true);
@@ -277,7 +302,6 @@ Required JSON Output Format (stream ONE object per line):
     setLoadingPhase('planning');
     
     try {
-        // Add line numbers to code for the LLM to reference
         const numberedLines = originalHtml.split('\n').map((line, idx) => `${idx + 1}: ${line}`).join('\n');
 
         const planningPrompt = `
@@ -295,10 +319,17 @@ ${numberedLines}
 Return a JSON Object with a single key "lines" containing an array of line numbers (integers) that are targeted for modification.
 Example: { "lines": [12, 13, 14, 45] }
         `.trim();
+        
+        const planningParts: any[] = [];
+        // Add images to planning phase if they help identify layout changes
+        requestImages.forEach(img => {
+            planningParts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+        });
+        planningParts.push({ text: planningPrompt });
 
         const planResponse = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: [{ parts: [{ text: planningPrompt }], role: 'user' }],
+            contents: [{ parts: planningParts, role: 'user' }],
             config: { responseMimeType: 'application/json' }
         });
 
@@ -309,7 +340,6 @@ Example: { "lines": [12, 13, 14, 45] }
             setPendingHighlights(planJson.lines);
         }
 
-        // Small artificial delay to let the user see the "Planning" highlights (Orange)
         await new Promise(r => setTimeout(r, 800));
 
         // --- PHASE 2: EXECUTION (Application) ---
@@ -335,10 +365,16 @@ ${originalHtml}
 3. Return the FULL, VALID, EXECUTABLE HTML string.
 4. Output ONLY raw HTML. No markdown fences.
         `.trim();
+        
+        const execParts: any[] = [];
+        requestImages.forEach(img => {
+            execParts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+        });
+        execParts.push({ text: execPrompt });
 
         const responseStream = await ai.models.generateContentStream({
             model: 'gemini-3-flash-preview',
-            contents: [{ parts: [{ text: execPrompt }], role: 'user' }],
+            contents: [{ parts: execParts, role: 'user' }],
             config: { temperature: 0.2 }
         });
 
@@ -363,10 +399,8 @@ ${originalHtml}
         if (finalHtml.startsWith('```')) finalHtml = finalHtml.substring(3).trimStart();
         if (finalHtml.endsWith('```')) finalHtml = finalHtml.substring(0, finalHtml.length - 3).trimEnd();
 
-        // Calculate Diff properly
         const diffs = computeDiffLines(originalHtml, finalHtml);
         
-        // Transition: Clear pending, show actual diffs (Green)
         setPendingHighlights([]); 
         setHighlightedLines(diffs);
 
@@ -396,19 +430,27 @@ ${originalHtml}
             setTimeout(() => inputRef.current?.focus(), 100);
         }
     }
-  }, [sessions, currentSessionIndex, focusedArtifactIndex, showAiBar]);
+  }, [sessions, currentSessionIndex, focusedArtifactIndex, showAiBar, selectedImages]);
 
   const handleSendMessage = useCallback(async (manualPrompt?: string) => {
     const promptToUse = manualPrompt || inputValue;
     const trimmedInput = promptToUse.trim();
-    if (!trimmedInput || isLoading) return;
+    if (!trimmedInput && selectedImages.length === 0) return;
+    if (isLoading) return;
+    
+    // If we have images but no text, we can still proceed (e.g., "Make this")
+    // But usually we want some text. Let's assume input value is sufficient.
     
     if (!manualPrompt) setInputValue('');
-
+    
     if (focusedArtifactIndex !== null) {
         await handleModifyArtifact(trimmedInput);
         return;
     }
+    
+    // Copy images for the session logic
+    const requestImages = [...selectedImages];
+    setSelectedImages([]);
 
     setIsLoading(true);
     setLoadingPhase('executing');
@@ -444,9 +486,15 @@ IP SAFEGUARD: Never use artist or brand names.
 GOAL: Return ONLY a raw JSON array of 3 *NEW* creative names.
         `.trim();
 
+        const styleParts: any[] = [];
+        requestImages.forEach(img => {
+            styleParts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+        });
+        styleParts.push({ text: stylePrompt });
+
         const styleResponse = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: { role: 'user', parts: [{ text: stylePrompt }] }
+            contents: { role: 'user', parts: styleParts }
         });
 
         let generatedStyles: string[] = [];
@@ -476,9 +524,15 @@ CONCEPTUAL DIRECTION: ${styleInstruction}
 Return ONLY RAW HTML.
           `.trim();
           
+                const artifactParts: any[] = [];
+                requestImages.forEach(img => {
+                    artifactParts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+                });
+                artifactParts.push({ text: prompt });
+
                 const responseStream = await ai.models.generateContentStream({
                     model: 'gemini-3-flash-preview',
-                    contents: [{ parts: [{ text: prompt }], role: "user" }],
+                    contents: [{ parts: artifactParts, role: "user" }],
                 });
 
                 let accumulatedHtml = '';
@@ -532,7 +586,7 @@ Return ONLY RAW HTML.
         setLoadingPhase('idle');
         setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [inputValue, isLoading, sessions.length, focusedArtifactIndex, handleModifyArtifact]);
+  }, [inputValue, isLoading, sessions.length, focusedArtifactIndex, handleModifyArtifact, selectedImages]);
 
   const handleSurpriseMe = () => {
       const currentPrompt = placeholders[placeholderIndex];
@@ -544,7 +598,7 @@ Return ONLY RAW HTML.
     if (event.key === 'Enter' && !isLoading) {
       event.preventDefault();
       handleSendMessage();
-    } else if (event.key === 'Tab' && !inputValue && !isLoading) {
+    } else if (event.key === 'Tab' && !inputValue && !isLoading && selectedImages.length === 0) {
         event.preventDefault();
         setInputValue(placeholders[placeholderIndex]);
     }
@@ -723,8 +777,34 @@ Return ONLY RAW HTML.
 
         {(!isEditing || showAiBar) && (
             <div className={`floating-input-container ${isEditing ? 'workshop-mode' : ''}`}>
+                 {/* Image Preview Area */}
+                 {selectedImages.length > 0 && (
+                     <div className="image-preview-container">
+                         {selectedImages.map((img, idx) => (
+                             <div key={idx} className="preview-thumb">
+                                 <img src={`data:${img.mimeType};base64,${img.data}`} alt="upload" />
+                                 <button onClick={() => removeImage(idx)} className="remove-btn">
+                                     <XIcon />
+                                 </button>
+                             </div>
+                         ))}
+                     </div>
+                 )}
+
                 <div className={`input-wrapper ${isLoading ? 'loading' : ''}`}>
-                    {(!inputValue && !isLoading) && (
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        style={{display: 'none'}} 
+                        onChange={handleFileSelect} 
+                        accept="image/*"
+                        multiple
+                    />
+                    <button className="icon-btn upload-btn" onClick={() => fileInputRef.current?.click()} disabled={isLoading}>
+                        <PaperclipIcon />
+                    </button>
+
+                    {(!inputValue && !isLoading && selectedImages.length === 0) && (
                         <div className="animated-placeholder" key={isEditing ? 'edit' : placeholderIndex}>
                              <span className="placeholder-text">
                                 {isEditing ? "Modify code (e.g. 'change bg to red')..." : placeholders[placeholderIndex]}
@@ -749,7 +829,7 @@ Return ONLY RAW HTML.
                             <ThinkingIcon />
                         </div>
                     )}
-                    <button className="send-button" onClick={() => handleSendMessage()} disabled={isLoading || !inputValue.trim()}>
+                    <button className="send-button" onClick={() => handleSendMessage()} disabled={isLoading || (!inputValue.trim() && selectedImages.length === 0)}>
                         <ArrowUpIcon />
                     </button>
                 </div>

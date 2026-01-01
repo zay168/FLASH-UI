@@ -25,3 +25,25 @@ export const computeDiffLines = (oldText: string, newText: string): number[] => 
     }
     return changedLines;
 };
+
+export const readFiles = async (files: File[]): Promise<{ mimeType: string; data: string }[]> => {
+    return Promise.all(
+        files.map(
+            (file) =>
+                new Promise<{ mimeType: string; data: string }>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const base64String = reader.result as string;
+                        // Extract just the base64 data part
+                        const base64Data = base64String.split(',')[1];
+                        resolve({
+                            mimeType: file.type,
+                            data: base64Data,
+                        });
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                })
+        )
+    );
+};
