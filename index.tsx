@@ -38,14 +38,22 @@ function App() {
   
   const [inputValue, setInputValue] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [loadingPhase, setLoadingPhase] = useState<'idle' | 'planning' | 'executing'>('idle');
+  
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [placeholders, setPlaceholders] = useState<string[]>(INITIAL_PLACEHOLDERS);
   
   // Workshop State
   const [showPreview, setShowPreview] = useState(true);
   const [showAiBar, setShowAiBar] = useState(true);
+  
+  // Two types of highlighting:
+  // 1. Pending: Lines identified by AI in Phase 1 (Orange/Yellow)
+  // 2. Completed: Actual diffs after Phase 2 (Green)
+  const [pendingHighlights, setPendingHighlights] = useState<number[]>([]);
   const [highlightedLines, setHighlightedLines] = useState<number[]>([]);
-  const [editorRatio, setEditorRatio] = useState(0.5); // 50% split by default
+  
+  const [editorRatio, setEditorRatio] = useState(0.5); 
   const [isResizing, setIsResizing] = useState(false);
   
   const [drawerState, setDrawerState] = useState<{
@@ -116,7 +124,7 @@ function App() {
                   contents: { 
                       role: 'user', 
                       parts: [{ 
-                          text: 'Generate 20 creative, short, diverse UI component prompts (e.g. "bioluminescent task list"). Return ONLY a raw JSON array of strings. IP SAFEGUARD: Avoid referencing specific famous artists, movies, or brands.' 
+                          text: 'Generate 20 creative, short, diverse UI component prompts. Return ONLY a raw JSON array of strings.' 
                       }] 
                   }
               });
@@ -140,7 +148,6 @@ function App() {
     setInputValue(event.target.value);
   };
 
-  // Manual code editing handler
   const handleCodeChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const newCode = e.target.value;
       if (focusedArtifactIndex !== null && currentSessionIndex !== -1) {
@@ -155,7 +162,6 @@ function App() {
       }
   };
 
-  // Synchronized Scrolling for Editor
   const handleEditorScroll = (e: React.UIEvent<HTMLDivElement>) => {
       const scrollTop = e.currentTarget.scrollTop;
       if (gutterRef.current) gutterRef.current.scrollTop = scrollTop;
@@ -202,6 +208,7 @@ function App() {
     const currentArtifact = currentSession.artifacts[focusedArtifactIndex];
 
     setIsLoading(true);
+    setLoadingPhase('executing');
     setComponentVariations([]);
     setDrawerState({ isOpen: true, mode: 'variations', title: 'Variations', data: currentArtifact.id });
 
@@ -212,17 +219,7 @@ function App() {
 
         const prompt = `
 You are a master UI/UX designer. Generate 3 RADICAL CONCEPTUAL VARIATIONS of: "${currentSession.prompt}".
-
-**STRICT IP SAFEGUARD:**
-No names of artists. 
-Instead, describe the *Physicality* and *Material Logic* of the UI.
-
-**YOUR TASK:**
-For EACH variation:
-- Invent a unique design persona name.
-- Rewrite the prompt to fully adopt that metaphor's visual language.
-- Generate high-fidelity HTML/CSS.
-
+STRICT IP SAFEGUARD: No names of artists. 
 Required JSON Output Format (stream ONE object per line):
 \`{ "name": "Persona Name", "html": "..." }\`
         `.trim();
@@ -242,6 +239,7 @@ Required JSON Output Format (stream ONE object per line):
         console.error("Error generating variations:", e);
     } finally {
         setIsLoading(false);
+        setLoadingPhase('idle');
     }
   }, [sessions, currentSessionIndex, focusedArtifactIndex]);
 
@@ -264,21 +262,60 @@ Required JSON Output Format (stream ONE object per line):
     
     const artifactIndex = focusedArtifactIndex;
     const artifact = currentSession.artifacts[artifactIndex];
-    const originalHtml = artifact.html; // Capture original state
-
+    const originalHtml = artifact.html;
+    
+    // Reset visual states
+    setPendingHighlights([]); 
+    setHighlightedLines([]);
     setIsLoading(true);
-    setHighlightedLines([]); 
 
-    // Important: We keep the original HTML visible while streaming the changes 'in-place' visually if possible,
-    // or we can clear it. Clearing it usually looks like a glitch. 
-    // Let's NOT clear it in the state, but we will replace it as chunks come in.
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return;
+    const ai = new GoogleGenAI({ apiKey });
+
+    // --- PHASE 1: PLANNING (Identification) ---
+    setLoadingPhase('planning');
     
     try {
-        const apiKey = process.env.API_KEY;
-        if (!apiKey) throw new Error("API_KEY is not configured.");
-        const ai = new GoogleGenAI({ apiKey });
+        // Add line numbers to code for the LLM to reference
+        const numberedLines = originalHtml.split('\n').map((line, idx) => `${idx + 1}: ${line}`).join('\n');
 
-        const prompt = `
+        const planningPrompt = `
+You are a Code Analyst.
+I will provide an HTML file with line numbers and a modification request.
+Identify WHICH lines need to be changed or where new lines need to be inserted.
+
+**CODE:**
+${numberedLines}
+
+**REQUEST:**
+"${instruction}"
+
+**TASK:**
+Return a JSON Object with a single key "lines" containing an array of line numbers (integers) that are targeted for modification.
+Example: { "lines": [12, 13, 14, 45] }
+        `.trim();
+
+        const planResponse = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: [{ parts: [{ text: planningPrompt }], role: 'user' }],
+            config: { responseMimeType: 'application/json' }
+        });
+
+        const planText = planResponse.text || "{}";
+        const planJson = JSON.parse(planText);
+        
+        if (planJson.lines && Array.isArray(planJson.lines)) {
+            setPendingHighlights(planJson.lines);
+        }
+
+        // Small artificial delay to let the user see the "Planning" highlights (Orange)
+        await new Promise(r => setTimeout(r, 800));
+
+        // --- PHASE 2: EXECUTION (Application) ---
+        setLoadingPhase('executing');
+
+        const execPrompt = `
 You are a SURGICAL CODE EDITOR. 
 The user wants to MODIFY a specific part of an existing HTML/CSS component.
 
@@ -301,7 +338,7 @@ ${originalHtml}
 
         const responseStream = await ai.models.generateContentStream({
             model: 'gemini-3-flash-preview',
-            contents: [{ parts: [{ text: prompt }], role: 'user' }],
+            contents: [{ parts: [{ text: execPrompt }], role: 'user' }],
             config: { temperature: 0.2 }
         });
 
@@ -310,7 +347,6 @@ ${originalHtml}
             const text = chunk.text;
             if (typeof text === 'string') {
                 accumulatedHtml += text;
-                // REAL-TIME UPDATE
                 setSessions(prev => prev.map((sess, i) => 
                     i === currentSessionIndex ? {
                         ...sess,
@@ -329,6 +365,9 @@ ${originalHtml}
 
         // Calculate Diff properly
         const diffs = computeDiffLines(originalHtml, finalHtml);
+        
+        // Transition: Clear pending, show actual diffs (Green)
+        setPendingHighlights([]); 
         setHighlightedLines(diffs);
 
         setSessions(prev => prev.map((sess, i) => 
@@ -352,6 +391,7 @@ ${originalHtml}
         ));
     } finally {
         setIsLoading(false);
+        setLoadingPhase('idle');
         if (showAiBar) {
             setTimeout(() => inputRef.current?.focus(), 100);
         }
@@ -371,6 +411,7 @@ ${originalHtml}
     }
 
     setIsLoading(true);
+    setLoadingPhase('executing');
     const baseTime = Date.now();
     const sessionId = generateId();
 
@@ -488,6 +529,7 @@ Return ONLY RAW HTML.
         console.error("Fatal error", e);
     } finally {
         setIsLoading(false);
+        setLoadingPhase('idle');
         setTimeout(() => inputRef.current?.focus(), 100);
     }
   }, [inputValue, isLoading, sessions.length, focusedArtifactIndex, handleModifyArtifact]);
@@ -546,7 +588,10 @@ Return ONLY RAW HTML.
                   <div className="editor-pane" style={{ width: showPreview ? `${editorRatio * 100}%` : '100%' }}>
                       <div className="editor-gutter" ref={gutterRef}>
                           {lines.map((_, i) => (
-                              <div key={i} className={`line-number ${highlightedLines.includes(i + 1) ? 'highlight-num' : ''}`}>
+                              <div key={i} className={`line-number 
+                                  ${highlightedLines.includes(i + 1) ? 'highlight-num' : ''}
+                                  ${pendingHighlights.includes(i + 1) ? 'pending-num' : ''}
+                              `}>
                                   {i + 1}
                               </div>
                           ))}
@@ -558,7 +603,10 @@ Return ONLY RAW HTML.
                             {/* Highlights Layer */}
                             <div className="code-highlights" aria-hidden="true">
                                 {lines.map((line, i) => (
-                                    <div key={i} className={`code-line ${highlightedLines.includes(i + 1) ? 'highlighted' : ''}`}>
+                                    <div key={i} className={`code-line 
+                                        ${highlightedLines.includes(i + 1) ? 'highlighted' : ''}
+                                        ${pendingHighlights.includes(i + 1) ? 'pending' : ''}
+                                    `}>
                                         {line || ' '}
                                     </div>
                                 ))}
@@ -590,6 +638,13 @@ Return ONLY RAW HTML.
               </div>
           </div>
       );
+  };
+
+  const getStatusLabel = () => {
+      if (!isLoading) return currentSession?.prompt;
+      if (loadingPhase === 'planning') return "Analyzing code structure...";
+      if (loadingPhase === 'executing') return "Applying surgical changes...";
+      return "Processing...";
   };
 
   return (
@@ -689,7 +744,7 @@ Return ONLY RAW HTML.
                     ) : (
                         <div className="input-generating-label">
                             <span className="generating-prompt-text">
-                                {isEditing ? "Applying surgical changes..." : currentSession?.prompt}
+                                {getStatusLabel()}
                             </span>
                             <ThinkingIcon />
                         </div>
