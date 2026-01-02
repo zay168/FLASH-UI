@@ -1,26 +1,37 @@
-# Flash UI: Remastered (Antigravity Edition)
+# FLASH-UI ⚡
 
-A React 19 application powered by **Gemini 3 Flash** for rapid UI generation and surgical code editing.
+> **Modern, Lightweight, and Fast UI Library for React.**
 
-## Key Features
+FLASH-UI is a next-generation component library designed for speed and aesthetics. Built with performance in mind, it provides a set of highly reusable, accessible, and customizable components to accelerate your web development workflow.
 
-*   **Surgical Editing:** Uses a two-phase AI process (Plan → Execute). It highlights intended changes in orange before applying the green diffs in real-time.
-*   **Multimodal:** Supports image uploads to guide code generation and design remixing.
-*   **Antigravity Design:** An immersive, spatial workspace with floating inputs and reactive backgrounds.
-*   **Variations:** Generates multiple design concepts in parallel.
+## 🚀 Features
 
-## Tech Stack
+*   **⚡ Blazing Fast**: Optimized for minimal bundle size and maximum rendering speed.
+*   **🎨 Fully Customizable**: Easily themable to match your brand identity.
+*   **📱 Responsive**: Mobile-first design principles out of the box.
+*   **✨ Developer Experience**: Typed with TypeScript for robust autocomplete and safety.
 
-*   React 19
-*   TypeScript
-*   Google GenAI SDK (`@google/genai`)
-*   Gemini 3 Flash Preview
+## 📦 Installation
 
-## Setup
+```bash
+npm install flash-ui
+# or
+yarn add flash-ui
+```
 
-1.  Clone the repository.
-2.  Ensure `process.env.API_KEY` is configured with a valid Google GenAI API key.
-3.  Run using a modern bundler (Vite recommended) or a local development server.
+## 💻 Usage
+
+```tsx
+import { Button } from 'flash-ui';
+
+function App() {
+  return (
+    <Button variant="primary" onClick={() => console.log('Clicked!')}>
+      Click Me ⚡
+    </Button>
+  );
+}
+```
 
 ---
-*Remastered version. Original concept by @ammaar.*
+*Built with ❤️ by [Zayd](https://github.com/zay168)*
