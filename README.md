@@ -1,37 +1,50 @@
 # FLASH-UI ⚡
 
-> **Modern, Lightweight, and Fast UI Library for React.**
+<div align="center">
+  <h3> Build faster. Shine brighter.</h3>
+  <p>A high-performance React component library designed for the next generation of web interfaces. TypeScript-native and visually stunning.</p>
+</div>
 
-FLASH-UI is a next-generation component library designed for speed and aesthetics. Built with performance in mind, it provides a set of highly reusable, accessible, and customizable components to accelerate your web development workflow.
+---
 
-## 🚀 Features
+## 🚀 Overview
 
-*   **⚡ Blazing Fast**: Optimized for minimal bundle size and maximum rendering speed.
-*   **🎨 Fully Customizable**: Easily themable to match your brand identity.
-*   **📱 Responsive**: Mobile-first design principles out of the box.
-*   **✨ Developer Experience**: Typed with TypeScript for robust autocomplete and safety.
+**FLASH-UI** isn't just another UI kit. It's a collection of **React + TypeScript** components built for speed and aesthetics. I created this to stop rewriting the same "cool" components for every project. Now, they live here.
 
-## 📦 Installation
+## ✨ Featured Components
 
-```bash
-npm install flash-ui
-# or
-yarn add flash-ui
-```
+The library includes several bespoke components ready for production:
 
-## 💻 Usage
+*   **⚡ `ArtifactCard`**: A polished card component for displaying complex content or file metadata.
+*   **🌌 `DottedGlowBackground`**: Instantly add depth and a "tech" atmosphere to any page background.
+*   **📱 `SideDrawer`**: A fully accessible, smooth-sliding navigation drawer.
+*   **🟢 `Icons`**: A set of optimized SVG icons for common UI needs.
+
+## 💻 Tech Stack
+
+*   **Core**: React 18+
+*   **Language**: TypeScript (Strict mode)
+*   **Build Tool**: Vite (Library Mode)
+
+## 📦 Usage
 
 ```tsx
-import { Button } from 'flash-ui';
+import { ArtifactCard, DottedGlowBackground } from 'flash-ui';
 
 function App() {
   return (
-    <Button variant="primary" onClick={() => console.log('Clicked!')}>
-      Click Me ⚡
-    </Button>
+    <DottedGlowBackground>
+      <div className="p-10">
+        <ArtifactCard 
+          title="Project X" 
+          description="Top secret next-gen dashboard." 
+          type="Code"
+        />
+      </div>
+    </DottedGlowBackground>
   );
 }
 ```
 
 ---
-*Built with ❤️ by [Zayd](https://github.com/zay168)*
+*Architected by [Zayd](https://github.com/zay168)*
