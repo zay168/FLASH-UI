@@ -2,36 +2,77 @@
 
 <div align="center">
   <h3>AI-Powered HTML/CSS Component Generator</h3>
-  <p>Describe what you need. Get production-ready code instantly.</p>
+  <p>Describe what you need. Get production-ready UI code instantly.</p>
+  <br />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?style=flat-square&logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Gemini-API-4285F4?style=flat-square&logo=google" alt="Gemini" />
 </div>
 
 ---
 
 ## 🧠 About
 
-FLASH-UI is an experimental tool that leverages **Google's Gemini API** to generate clean, semantic HTML and CSS components on demand.
+FLASH-UI is an experimental AI tool that leverages **Google's Gemini API** to generate clean, semantic HTML and CSS components on demand.
 
-No frameworks. No dependencies. Just pure, copy-paste-ready code.
+Describe any UI component in natural language, and watch as the AI builds it in real-time with streaming output.
 
-## ✨ Use Cases
+## ✨ Features
 
-*   **Rapid Prototyping**: Quickly scaffold UI elements for mockups.
-*   **Learning**: See how AI interprets design concepts into code.
-*   **Boilerplate Generation**: Skip the boring parts.
+*   **🎨 3 Design Directions**: For every prompt, get 3 unique stylistic interpretations.
+*   **✏️ Live Code Editor**: Edit the generated code directly with syntax highlighting.
+*   **👁️ Real-time Preview**: See your component render as you type.
+*   **🔄 Variations Mode**: Generate radical redesigns with one click.
+*   **📸 Image Input**: Upload reference images to guide the generation.
 
-## 🛠️ Stack
+## 🛠️ Tech Stack
 
-*   **AI Model**: Google Gemini (via API)
-*   **Frontend**: React + TypeScript + Vite
-*   **Output**: Pure HTML/CSS
+| Layer | Technology |
+|-------|------------|
+| **AI Model** | Google Gemini (via `@google/genai`) |
+| **Frontend** | React 19 + TypeScript |
+| **Build** | Vite 6 |
+| **Output** | Pure HTML/CSS (copy-paste ready) |
 
-## 🚀 How It Works
+## 🚀 Getting Started
 
-1.  Enter your Gemini API key.
-2.  Describe the component you need (e.g., "A dark mode pricing card with 3 tiers").
-3.  Get the generated HTML/CSS.
-4.  Copy, paste, use.
+```bash
+# Clone the repository
+git clone https://github.com/zay168/FLASH-UI.git
+cd FLASH-UI
+
+# Install dependencies
+npm install
+
+# Create your environment file
+cp .env.example .env
+# Add your Gemini API key to .env
+
+# Run the development server
+npm run dev
+```
+
+## 📁 Project Structure
+
+```
+FLASH-UI/
+├── src/
+│   ├── index.tsx       # Main application
+│   ├── index.css       # Global styles
+│   ├── components/     # React components
+│   ├── constants.ts    # App constants
+│   ├── types.ts        # TypeScript types
+│   └── utils.ts        # Utility functions
+├── index.html          # Entry point
+├── package.json
+├── tsconfig.json
+└── vite.config.ts
+```
+
+## 🔑 API Key
+
+Get your free Gemini API key at [Google AI Studio](https://aistudio.google.com/app/apikey).
 
 ---
 
-*An AI experiment by [Zayd](https://github.com/zay168)*
+*Built with ❤️ by [Zayd](https://github.com/zay168) • Based on work by [@ammaar](https://x.com/ammaar)*
